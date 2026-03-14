@@ -1,24 +1,40 @@
-import express from "express";
-import logger from "./utils/logger";
-import cors from "cors";
 import dotenv from "dotenv";
-import path from "path";
 dotenv.config();
-const app = express();
 
-app.use(
-  cors({
-    origin: [process.env.WEB_ORIGIN!],
-    credentials: true,
-  }),
-);
+import { app } from "./app";
+import logger from "./utils/logger";
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", time: Date.now() });
+const PORT = process.env["PORT"] ?? 3000;
+
+/**
+ * Keep a referenc
+ */
+const server = app.listen(PORT, () => {
+  logger.info(`[server] Running on port ${PORT}`);
 });
 
-const PORT = process.env.PORT || 3000;
+const gracefulShutdown = (signal: string): void => {
+  logger.info(`[server] ${signal} received - shutting down`);
 
-app.listen(3000, () => {
-  logger.info(`${process.pid} is running on port ${PORT}`);
+  server.close((err) => {
+    if (err) {
+      logger.error("[server] Error during shutdown", err);
+      process.exit(1);
+    }
+    logger.info("[server] All connections closed");
+    process.exit(0);
+  });
+};
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("[server] Unhandled rejection", reason);
+  gracefulShutdown("unhandledRejection");
 });
+
+process.on("uncaughtException", (error) => {
+  logger.error("[server] Uncaught exception", error);
+  gracefulShutdown("uncaughtException");
+});
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
